@@ -87,7 +87,7 @@ class HumaneAi:
             prompt = st.text_area("Enter Image Generation Prompt")
             prompt_submit = st.form_submit_button("Submit Prompt")
 
-        os.environ["REPLICATE_API_TOKEN"] = "r8_PFaSjXuVPxcpCSBBry9IptD4xPZTwoc3HE9Sh"
+        os.environ["REPLICATE_API_TOKEN"] = "Your_key"
         placeholder = st.empty()
 
         placeholder.markdown("<div style='margin: 20px;'><h3 style='text-align: center; padding: 50px'>Image will be displayed here once generated.</h3></div>", unsafe_allow_html=True)
