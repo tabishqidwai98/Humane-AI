@@ -4,9 +4,13 @@ from config import *
 import time
 import random
 
-st.title("Humane AI")
+st.set_page_config(
+    page_title="Humane AI",
+    page_icon="💞"
+)
 
 #st.markdown("\twith Love💞")
+st.title("Humane AI")
 st.caption("-with love💞")
 
 menu = ['Gemini Ai','Mistral-7b', 'MusicGenMeta','stableai']
@@ -14,8 +18,7 @@ menu = ['Gemini Ai','Mistral-7b', 'MusicGenMeta','stableai']
 option = st.sidebar.selectbox("the feature you want",menu)
 
 if option == 'Gemini Ai':
-    st.header("Gemini Ai")
-    st.caption("A Chatbot Powered by Google Gemini Pro")
+    st.markdown('''A Chatbot Powered by **:red[Google Gemini Pro]**''')
 
     if "app_key" not in st.session_state:
         app_key = st.text_input("Please enter your Gemini API Key", type='password')
