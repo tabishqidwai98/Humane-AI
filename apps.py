@@ -31,7 +31,6 @@ if choice == "HumaneGPT":
     for msg in st.session_state.messages:
         st.chat_message(msg["role"]).write(msg["content"])
 
-
         prompt = st.chat_input('Say something')
         if prompt:
             if not openai_api_key:
