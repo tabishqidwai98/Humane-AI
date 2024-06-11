@@ -1,5 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
+from transformers import AutoProcessor, MusicgenForConditionalGeneration
+from IPython.display import Audio
 from config import *
 import time
 import random
@@ -73,7 +75,23 @@ if option == 'Gemini Ai':
 if option == 'Mistral-7b':
     st.text('hello')
 
+
+
 if option == 'MusicGen':
+    processor = AutoProcessor.from_pretrained("facebook/musicgen-medium")
+    model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-medium")
+    
+    inputs = processor(
+        text=["90s pop track with bassy drums, synth and guitar", "90s rock song with loud guitars and heavy drums"],
+        padding=True,
+        return_tensors="pt",
+    )
+
+    audio_values = model.generate(**inputs, max_new_tokens=1024)
+
+    sampling_rate = model.config.audio_encoder.sampling_rate
+    print(type(Audio(audio_values[0].numpy(), rate=sampling_rate)))
+    
     st.text('hello')
 
 if option == 'stableai':
