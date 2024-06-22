@@ -8,3 +8,6 @@ accelerate==0.30.1
 bitsandbytes==0.43.1
 langchain==0.1.2
 google-generativeai
+audiocraft
+torch
+torchaudio

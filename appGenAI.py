@@ -1,10 +1,12 @@
 import streamlit as st
 import google.generativeai as genai
-from transformers import AutoProcessor, MusicgenForConditionalGeneration
-from IPython.display import Audio
 from config import *
 import time
 import random
+from audiocraft.models import MusicGen
+from audiocraft.data.audio_utils import i16_pcm, normalize_audio
+import torch
+import torchaudio
 
 st.set_page_config(
     page_title="Humane AI",
@@ -22,55 +24,40 @@ option = st.sidebar.selectbox("the feature you want",menu)
 if option == 'Gemini Ai':
     st.markdown('''A Chatbot Powered by **:red[Google Gemini Pro]**''')
 
-    if "app_key" not in st.session_state:
-        app_key = st.text_input("Please enter your Gemini API Key", type='password')
-        if app_key:
-            st.session_state.app_key = app_key
-    
-    if "history" not in st.session_state:
-        st.session_state.history = []
+    # Initialize Gemini-Pro 
+    genai.configure(api_key=keys['GOOGLE_API_KEY'])
+    model = genai.GenerativeModel('gemini-pro')
 
-    try:
-        genai.configure(api_key = st.session_state.app_key)
-    except AttributeError as e:
-        st.warning("Please Put Your Gemini API Key First")
+    # Gemini uses 'model' for assistant; Streamlit uses 'assistant'
+    def role_to_streamlit(role):
+        if role == "model":
+            return "assistant"
+        else:
+            return role
 
-    model = genai.GenerativeModel("gemini-pro")
-    chat = model.start_chat(history = st.session_state.history)
+    # Add a Gemini Chat history object to Streamlit session state
+    if "chat" not in st.session_state:
+        st.session_state.chat = model.start_chat(history = [])
 
-    for message in chat.history:
-        role ="assistant" if message.role == 'model' else message.role
-        with st.chat_message(role):
+    # Display Form Title
+    st.title("Chat with Google Gemini-Pro!")
+
+    # Display chat messages from history above current input box
+    for message in st.session_state.chat.history:
+        with st.chat_message(role_to_streamlit(message.role)):
             st.markdown(message.parts[0].text)
 
-    if "app_key" in st.session_state:
-        if prompt := st.chat_input(""):
-            prompt = prompt.replace('\n', ' \n')
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                message_placeholder.markdown("Thinking...")
-                try:
-                    full_response = ""
-                    for chunk in chat.send_message(prompt, stream=True):
-                        word_count = 0
-                        random_int = random.randint(5,10)
-                        for word in chunk.text:
-                            full_response+=word
-                            word_count+=1
-                            if word_count == random_int:
-                                time.sleep(0.05)
-                                message_placeholder.markdown(full_response + "_")
-                                word_count = 0
-                                random_int = random.randint(5,10)
-                    message_placeholder.markdown(full_response)
-                except genai.types.generation_types.BlockedPromptException as e:
-                    st.exception(e)
-                except Exception as e:
-                    st.exception(e)
-                st.session_state.history = chat.history
-
+    # Accept user's next message, add to context, resubmit context to Gemini
+    if prompt := st.chat_input("I possess a well of knowledge. What would you like to know?"):
+        # Display user's last message
+        st.chat_message("user").markdown(prompt)
+        
+        # Send user entry to Gemini and read the response
+        response = st.session_state.chat.send_message(prompt) 
+        
+        # Display last 
+        with st.chat_message("assistant"):
+            st.markdown(response.text)
 
 if option == 'Mistral-7b':
     st.text('hello')
@@ -78,20 +65,63 @@ if option == 'Mistral-7b':
 
 
 if option == 'MusicGen':
-    processor = AutoProcessor.from_pretrained("facebook/musicgen-medium")
-    model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-medium")
-    
-    inputs = processor(
-        text=["90s pop track with bassy drums, synth and guitar", "90s rock song with loud guitars and heavy drums"],
-        padding=True,
-        return_tensors="pt",
-    )
 
-    audio_values = model.generate(**inputs, max_new_tokens=1024)
+    @st.cache_resource
+    def loadmodel(name):
+        model = MusicGen.get_pretrained(name)
+        return model
 
-    sampling_rate = model.config.audio_encoder.sampling_rate
-    print(type(Audio(audio_values[0].numpy(), rate=sampling_rate)))
-    
+
+    def setparams(model, use_sampling, top_k, top_p, temperature, cfg_coef, duration):
+        model.set_generation_params(
+            use_sampling=use_sampling,
+            top_k=top_k,
+            top_p=top_p,
+            temperature=temperature,
+            cfg_coef=cfg_coef,
+            duration=duration)
+        return model
+
+
+    def generate(model, prompt):
+        output = model.generate(descriptions=prompt, progress=True)
+        return output
+
+
+    def purge():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+        gc.collect()
+
+
+    st.title("MG Music Gen")
+    st.divider()
+    option = st.selectbox('Select a model:', ('small', 'medium', 'melody', 'large'))
+    prompt = st.text_input(label='Prompt:', value='90s rock song with loud guitars and heavy drums')
+    if st.button("Generate"):
+        purge()
+        model = loadmodel(option)
+        model_ready = setparams(model, use_sampling=True, top_k=250, top_p=0.0, temperature=1.0, cfg_coef=3.0, duration=10)
+        purge()
+        with st.spinner("Generating..."):
+            output = generate(model_ready, prompt)
+        with st.spinner("Detaching..."):
+            output = output.detach().cpu().float()[0]
+        with st.spinner("Normalizing..."):
+            wav = normalize_audio(wav=output, sample_rate=32000, strategy="rms")
+        with st.spinner("PCM Encoding..."):
+            pcm_audio = i16_pcm(wav)
+        with st.spinner("Saving..."):
+            now = str(time.strftime("%Y%m%d-%H%M%S"))
+            filename = now + ".wav"
+            torchaudio.save(filename, pcm_audio, sample_rate=32000, encoding="PCM_S", bits_per_sample=16)
+        st.write("File " + filename + " created.")
+        with st.spinner("Loading..."):
+            with open(filename, "rb") as f:
+                generation = f.read()
+            st.audio(generation)
+    purge()
+
     st.text('hello')
 
 if option == 'stableai':
